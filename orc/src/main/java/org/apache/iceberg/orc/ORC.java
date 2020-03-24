@@ -36,7 +36,6 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
-import org.apache.iceberg.orc.OrcFilters.ConvertFilterToOrc;
 import org.apache.orc.OrcConf;
 import org.apache.orc.OrcFile;
 import org.apache.orc.OrcFile.ReaderOptions;
@@ -123,8 +122,6 @@ public class ORC {
     private final InputFile file;
     private final Configuration conf;
     private org.apache.iceberg.Schema schema = null;
-    private SearchArgument sarg = null;
-    private String[] sargColumns = null;
     private Expression filter = null;
     private boolean caseSensitive = true;
     private Long start = null;
@@ -165,9 +162,9 @@ public class ORC {
       return this;
     }
 
-    public ReadBuilder caseSensitive(boolean caseSensitive) {
-      this.caseSensitive = caseSensitive;
-      OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(this.conf, caseSensitive);
+    public ReadBuilder caseSensitive(boolean caseSens) {
+      this.caseSensitive = caseSens;
+      OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(this.conf, caseSens);
       return this;
     }
 
