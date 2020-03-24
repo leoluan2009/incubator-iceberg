@@ -29,18 +29,21 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.exceptions.RuntimeIOException;
+import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.orc.OrcFilters.ConvertFilterToOrc;
 import org.apache.orc.OrcConf;
 import org.apache.orc.OrcFile;
 import org.apache.orc.OrcFile.ReaderOptions;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
+import org.apache.orc.storage.ql.io.sarg.SearchArgument;
 
 @SuppressWarnings("checkstyle:AbbreviationAsWordInName")
 public class ORC {
@@ -120,6 +123,10 @@ public class ORC {
     private final InputFile file;
     private final Configuration conf;
     private org.apache.iceberg.Schema schema = null;
+    private SearchArgument sarg = null;
+    private String[] sargColumns = null;
+    private Expression filter = null;
+    private boolean caseSensitive = true;
     private Long start = null;
     private Long length = null;
 
@@ -153,7 +160,13 @@ public class ORC {
       return this;
     }
 
+    public ReadBuilder filter(Expression newFilter) {
+      this.filter = newFilter;
+      return this;
+    }
+
     public ReadBuilder caseSensitive(boolean caseSensitive) {
+      this.caseSensitive = caseSensitive;
       OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(this.conf, caseSensitive);
       return this;
     }
@@ -170,7 +183,13 @@ public class ORC {
 
     public <D> CloseableIterable<D> build() {
       Preconditions.checkNotNull(schema, "Schema is required");
-      return new OrcIterable<>(file, conf, schema, start, length, readerFunc);
+      SearchArgument sarg = null;
+      String[] sargColumns = null;
+      if (filter != null) {
+        sarg = OrcFilters.convert(schema, filter, caseSensitive);
+        sargColumns = schema.getAliases().keySet().toArray(new String[0]);
+      }
+      return new OrcIterable<>(file, conf, schema, sarg, sargColumns, start, length, readerFunc);
     }
   }
 

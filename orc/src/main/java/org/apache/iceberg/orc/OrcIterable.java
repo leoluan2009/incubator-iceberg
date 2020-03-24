@@ -22,15 +22,19 @@ package org.apache.iceberg.orc;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.function.Function;
+
+import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.io.CloseableGroup;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.InputFile;
+import org.apache.orc.OrcConf;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
+import org.apache.orc.storage.ql.io.sarg.SearchArgument;
 
 /**
  * Iterable used to read rows from ORC.
@@ -39,16 +43,20 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   private final Configuration config;
   private final Schema schema;
   private final InputFile file;
+  private final SearchArgument sarg;
+  private final String[] sargColumns;
   private final Long start;
   private final Long length;
   private final Function<TypeDescription, OrcValueReader<?>> readerFunction;
 
   OrcIterable(InputFile file, Configuration config, Schema schema,
-              Long start, Long length,
+              SearchArgument sarg, String[] sargColumns, Long start, Long length,
               Function<TypeDescription, OrcValueReader<?>> readerFunction) {
     this.schema = schema;
     this.readerFunction = readerFunction;
     this.file = file;
+    this.sarg = sarg;
+    this.sargColumns = sargColumns;
     this.start = start;
     this.length = length;
     this.config = config;
@@ -62,15 +70,20 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     TypeDescription readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, orcFileReader.getSchema());
 
     return new OrcIterator(
-        newOrcIterator(file, readOrcSchema, start, length, orcFileReader),
+        newOrcIterator(file, readOrcSchema, sarg, sargColumns, start, length, orcFileReader),
         readerFunction.apply(readOrcSchema));
   }
 
-  private static VectorizedRowBatchIterator newOrcIterator(InputFile file,
-                                                           TypeDescription readerSchema,
-                                                           Long start, Long length,
-                                                           Reader orcFileReader) {
+  private static VectorizedRowBatchIterator newOrcIterator(
+      InputFile file,
+      TypeDescription readerSchema,
+      SearchArgument sarg, String[]  sargColumns,
+      Long start, Long length,
+      Reader orcFileReader) {
     final Reader.Options options = orcFileReader.options();
+    if (sarg != null && sargColumns != null) {
+      options.searchArgument(sarg, sargColumns);
+    }
     if (start != null) {
       options.range(start, length);
     }
